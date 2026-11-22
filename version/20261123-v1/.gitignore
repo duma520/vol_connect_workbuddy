@@ -1,0 +1,22 @@
+# 运行期产物
+logs/
+config.json
+*.log
+_e2e_codex_home/
+_e2e_home2/
+_probe/
+__pycache__/
+*.pyc
+
+# 绝不提交：任何凭据、保险库副本、令牌
+.env
+.env.*
+!.env.example
+*vault*/
+*.token
+credentials*
+
+# 打包中间物
+dist/
+build/
+*.zip

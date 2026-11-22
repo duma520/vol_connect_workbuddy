@@ -1,0 +1,19 @@
+# 本预设把 Codex 接到本机中继 vol_connect_workbuddy，由中继管理 WorkBuddy 多账号。
+# 用前必须先启动中继（双击 启动中继.bat，或 python -m relay.app）。
+# __vol_none__ 是导入时删除该键的标记。
+model = "deepseek-v4.1-flash"
+model_provider = "vol_connect_workbuddy"
+model_catalog_json = "model_catalog_vol_connect_workbuddy.json"
+model_supports_reasoning_summaries = "__vol_none__"
+model_context_window = "__vol_none__"
+model_auto_compact_token_limit = "__vol_none__"
+review_model = "__vol_none__"
+
+[model_providers.vol_connect_workbuddy]
+name = "WorkBuddy（多账号中继）"
+# 中继默认监听 127.0.0.1:17583。若你在面板里改了端口，这里要同步改。
+base_url = "http://127.0.0.1:17583/v1"
+wire_api = "responses"
+# 密钥由中继自己管（读 DSH 保险库），Codex 侧不需要填。
+experimental_bearer_token = "PROXY_MANAGED"
+requires_openai_auth = false
