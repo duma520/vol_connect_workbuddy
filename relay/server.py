@@ -15,6 +15,7 @@
 from __future__ import annotations
 
 import json
+import os
 import threading
 import time
 import traceback
@@ -23,16 +24,17 @@ from typing import Any
 
 import httpx
 
+from . import __version__
 from . import accounts as accounts_mod
 from . import config
-from . import convert_in, convert_out, upstream
+from . import convert_in, convert_out, transfer, upstream
 from .logging_setup import log_line, recent_lines
 
 
 class RelayHandler(BaseHTTPRequestHandler):
     """所有路由的实现。"""
 
-    server_version = "vol-connect-workbuddy/1.0.0"
+    server_version = "vol-connect-workbuddy/" + __version__
     protocol_version = "HTTP/1.1"
 
     # ---------- 小工具 ----------
@@ -106,6 +108,9 @@ class RelayHandler(BaseHTTPRequestHandler):
             if path == "/admin/logs":
                 self._json(200, {"lines": recent_lines(200)})
                 return
+            if path == "/admin/export":
+                self._handle_export()
+                return
             self._json(404, {"error": "not found", "path": path})
         except Exception as exc:
             log_line("ERROR", "http", "GET " + path + " 失败: " + repr(exc))
@@ -131,6 +136,12 @@ class RelayHandler(BaseHTTPRequestHandler):
                 log_line("INFO", "admin", "配置已更新并落盘")
                 self._json(200, {"ok": True, "config": merged})
                 return
+            if path == "/admin/transfer/preview":
+                self._handle_preview()
+                return
+            if path == "/admin/transfer/import":
+                self._handle_import()
+                return
             self._json(404, {"error": "not found", "path": path})
         except _ClientGone:
             log_line("WARN", "http", "客户端提前断开 " + path)
@@ -141,6 +152,128 @@ class RelayHandler(BaseHTTPRequestHandler):
                 self._json(500, {"error": str(exc)[:400]})
             except Exception:
                 pass
+
+    # ---------- 账号导出 / 导入（与 dsh-connect-workbuddy 完全兼容）----------
+
+    def _handle_export(self) -> None:
+        """导出账号。GET /admin/export?ids=a,b,c（省略 ids 表示全部）。"""
+        query = self.path.split("?", 1)[1] if "?" in self.path else ""
+        wanted: list = []
+        for pair in query.split("&"):
+            if pair.startswith("ids="):
+                raw = pair[3:]
+                wanted = [x for x in raw.replace("%2C", ",").split(",") if x]
+        pool = accounts_mod.pool()
+        rows = pool.snapshot()
+        if wanted:
+            rows = [r for r in rows if str(r.get("uid") or r.get("label") or "") in wanted]
+            if not rows:
+                # 也允许按账号 id / nickname 匹配
+                rows = [r for r in pool.snapshot()
+                        if str(r.get("nickname") or "") in wanted or str(r.get("label") or "") in wanted]
+        accounts = pool.accounts() if hasattr(pool, "accounts") else []
+        by_key = {}
+        for account in accounts:
+            by_key[str(account.uid or "")] = account
+            by_key[str(account.account_id or "")] = account
+            by_key[str(account.label or "")] = account
+            by_key[str(account.nickname or "")] = account
+
+        picked = []
+        if wanted:
+            seen = set()
+            for key in wanted:
+                account = by_key.get(key)
+                if account is not None and id(account) not in seen:
+                    seen.add(id(account))
+                    picked.append(account)
+        else:
+            picked = list(accounts)
+
+        records = []
+        for account in picked:
+            try:
+                records.append(transfer.transfer_record_of(account))
+            except Exception as exc:
+                log_line("WARN", "transfer", "导出 " + account.label + " 失败: " + repr(exc)[:200])
+
+        payload = transfer.export_payload(records)
+        body = json.dumps(payload, ensure_ascii=False, indent=2).encode("utf-8")
+        filename = transfer.default_export_name()
+        log_line("INFO", "transfer", "导出 " + str(len(records)) + " 个账号")
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Content-Disposition", "attachment; filename=\"" + filename + "\"")
+        self.send_header("X-Export-Filename", filename)
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        try:
+            self.wfile.write(body)
+        except (BrokenPipeError, ConnectionResetError):
+            pass
+
+    def _handle_preview(self) -> None:
+        """脱敏预览导入文件。请求体 {"text": "<文件文本>"}。"""
+        body = self._read_json()
+        text = body.get("text")
+        if not isinstance(text, str):
+            self._json(400, {"ok": False, "error": "缺少 text 字段（文件文本）。"})
+            return
+        try:
+            result = transfer.preview_transfer_file(text)
+        except ValueError as exc:
+            self._json(400, {"ok": False, "error": str(exc)})
+            return
+        self._json(200, {"ok": True, **result})
+
+    def _handle_import(self) -> None:
+        """导入账号。请求体 {"text": ..., "indexes": [...], "region": "cn"|"global"}。"""
+        body = self._read_json()
+        text = body.get("text")
+        indexes = body.get("indexes")
+        region = str(body.get("region") or "cn")
+        if not isinstance(text, str):
+            self._json(400, {"ok": False, "error": "缺少 text 字段（文件文本）。"})
+            return
+        if not isinstance(indexes, list) or not indexes:
+            self._json(400, {"ok": False, "error": "缺少 indexes 字段（要导入的条目序号）。"})
+            return
+        try:
+            records = transfer.parse_transfer_file(text)
+        except ValueError as exc:
+            self._json(400, {"ok": False, "error": str(exc)})
+            return
+
+        settings = config.load()
+        vault_dir = str(settings.get("vault_dir") or "")
+        if not vault_dir or not os.path.isdir(vault_dir):
+            self._json(400, {"ok": False, "error": "保险库目录不存在，无法写入：" + vault_dir})
+            return
+
+        merged = transfer.merge_records(records, indexes, region)
+        written = []
+        failed = []
+        for account_id, credential in merged["changes"].items():
+            try:
+                path = accounts_mod.write_vault_account(credential, region, vault_dir)
+                written.append({"id": account_id, "path": path})
+            except Exception as exc:
+                failed.append({"id": account_id, "error": repr(exc)[:200]})
+
+        log_line(
+            "INFO", "transfer",
+            "导入 " + region + "：成功 " + str(len(written)) +
+            "，跳过 " + str(merged["skipped"]) +
+            "，写入失败 " + str(len(failed)),
+        )
+        self._json(200, {
+            "ok": True,
+            "imported": len(written),
+            "skipped": merged["skipped"],
+            "skip_reasons": merged["skip_reasons"],
+            "written": written,
+            "failed": failed,
+        })
 
     # ---------- 核心：/v1/responses ----------
 

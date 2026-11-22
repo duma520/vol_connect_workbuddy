@@ -219,6 +219,11 @@ class AccountPool:
                 })
             return out
 
+    def accounts(self) -> list:
+        """返回账号对象列表（给导出用，调用方只读）。"""
+        with self._lock:
+            return list(self._accounts)
+
     def count(self) -> int:
         with self._lock:
             return len(self._accounts)
@@ -255,6 +260,46 @@ class AccountPool:
 
 _pool = AccountPool()
 
+
+def write_vault_account(credential: dict, region: str, vault_dir: str) -> str:
+    """把一条导入的凭据写成保险库文件，返回写出的路径。
+
+    文件名用账号 id，内容结构与 DSH 保险库同构（auth + account 双键），
+    这样插件那边也能直接读。
+    """
+    import json as _json
+    from pathlib import Path
+
+    folder = Path(vault_dir) / region
+    folder.mkdir(parents=True, exist_ok=True)
+    # 账号 id 必须用与插件一致的算法（sha256("workbuddy\0"+uin|uid|nickname) 前 24 位十六进制），
+    # 否则写出的文件名与插件原有文件不同名，导入会变成「新增一份」而不是「覆盖」。
+    from .transfer import account_id_of
+
+    account_id = account_id_of(credential)
+    path = folder / (account_id + ".json")
+
+    payload = {
+        "version": 1,
+        "accountId": account_id,
+        "refreshedAtMs": int(time.time() * 1000),
+        "auth": {
+            "accessToken": credential.get("access_token") or "",
+            "refreshToken": credential.get("refresh_token") or "",
+            "expiresAt": int(credential.get("expires_at") or 0),
+            "refreshExpiresAt": int(credential.get("refresh_expires_at") or 0),
+            "domain": credential.get("domain") or "",
+        },
+        "account": {
+            "uid": credential.get("uid") or "",
+            "nickname": credential.get("nickname") or "",
+            "uin": credential.get("uin") or "",
+        },
+    }
+    tmp = path.with_suffix(".json.tmp")
+    tmp.write_text(_json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    tmp.replace(path)
+    return str(path)
 
 def pool() -> AccountPool:
     return _pool

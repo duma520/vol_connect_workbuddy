@@ -1,0 +1,9 @@
+{
+  "displayName": "WorkBuddy（多账号中继）",
+  "tomlFile": "vol_connect_workbuddy.toml",
+  "jsonFiles": [
+    "model_catalog_vol_connect_workbuddy.json"
+  ],
+  "readmeFile": "readme_vol_connect_workbuddy.txt",
+  "docsUrl": "https://github.com/duma520/vol_connect_workbuddy"
+}

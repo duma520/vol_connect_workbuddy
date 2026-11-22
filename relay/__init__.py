@@ -8,6 +8,7 @@
 - convert_out Chat Completions SSE → Responses 事件
 - server      HTTP 服务（/v1/responses 等）
 - errors      上游错误分类
+- transfer    账号导出 / 导入（与 dsh-connect-workbuddy 插件格式互通）
 """
 
-__version__ = "1.0.0"
+__version__ = "1.1.0"

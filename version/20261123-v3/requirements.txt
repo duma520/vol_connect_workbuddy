@@ -1,0 +1,7 @@
+# 运行必需
+httpx>=0.27
+
+# 图形面板（可选；不装则只能用 --no-gui）
+PySide6>=6.6
+
+# 说明：HTTP 服务用标准库 http.server，不需要 Flask / FastAPI。

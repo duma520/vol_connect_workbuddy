@@ -38,6 +38,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from gui.transfer_dialog import ExportDialog, ImportDialog
 from gui.workers import AccountLoader, ProbeWorker
 from relay import __version__, accounts, config, server
 from relay.logging_setup import log_line, recent_lines
@@ -134,6 +135,12 @@ class MainWindow(QMainWindow):
         self.btn_probe = QPushButton("检测全部账号")
         self.btn_probe.clicked.connect(self.probe_accounts)
         bar.addWidget(self.btn_probe)
+        self.btn_export = QPushButton("导出账号")
+        self.btn_export.clicked.connect(self.export_accounts)
+        bar.addWidget(self.btn_export)
+        self.btn_import = QPushButton("导入账号")
+        self.btn_import.clicked.connect(self.import_accounts)
+        bar.addWidget(self.btn_import)
         self.account_summary = QLabel("账号：—")
         bar.addWidget(self.account_summary, 1)
         layout.addLayout(bar)
@@ -268,6 +275,14 @@ class MainWindow(QMainWindow):
             "\n"
             "本面板能看什么：\n"
             "- 账号池：每个账号的可用状态、失败次数、冷却剩余秒数、最近一次错误。\n"
+            "- 导出账号：「账号池」页的「导出账号」按钮，勾选后另存为 JSON。\n"
+            "- 导入账号：「账号池」页的「导入账号」按钮，选文件 → 脱敏预览 → 勾选 → 导入。\n"
+            "\n"
+            "账号文件与 DSH 插件 dsh-connect-workbuddy 完全互通：\n"
+            "  · 本程序导出的 workbuddy-accounts-日期.json 可以直接丢给插件导入；\n"
+            "  · 插件导出的同名文件也可以直接在这里导入。\n"
+            "  导入会覆盖已存在的同名账号；缺 token、或 domain 判定不出区域的记录会跳过。\n"
+            "  文件里是明文 token，请勿随意外发。\n"
             "- 设置：默认模型、最多换号次数、账号来源，改完立即保存。\n"
             "- 运行日志：上游到底回了什么，出问题先看这里。\n"
             "\n"
@@ -354,6 +369,18 @@ class MainWindow(QMainWindow):
         )
         self.progress.setValue(100)
         self._refresh_status()
+
+    def export_accounts(self) -> None:
+        """导出账号到兼容 dsh-connect-workbuddy 的 JSON 文件。"""
+        dialog = ExportDialog(self)
+        if dialog.exec():
+            self.reload_accounts()
+
+    def import_accounts(self) -> None:
+        """从文件导入账号（可直接用插件导出的文件）。"""
+        dialog = ImportDialog(self)
+        if dialog.exec():
+            self.reload_accounts()
 
     def probe_accounts(self) -> None:
         if self.prober is not None and self.prober.isRunning():
