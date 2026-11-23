@@ -33,7 +33,7 @@
 
 | 组成 | 是什么 | 在哪 |
 |---|---|---|
-| **本地中继** | 一个在你电脑上跑的小程序，负责登录 WorkBuddy、管理多账号、自动换号、把两边的协议翻译过来 | `G:\Python_Code\vol_connect_workbuddy\` |
+| **本地中继** | 一个在你电脑上跑的小程序，负责登录 WorkBuddy、管理多账号、自动换号、把两边的协议翻译过来 | `你的项目目录\vol_connect_workbuddy\` |
 | **火山预设** | 4 个配置文件，让火山知道「有这么个模型，地址是 127.0.0.1:17583」 | `D:\voldev\plugins\vol_ai_codex\models\` |
 
 ### 它怎么工作（一句话版）
@@ -72,7 +72,7 @@
 
 ### 第 1 步：把项目放到电脑上
 
-把整个 `vol_connect_workbuddy` 文件夹放到 `G:\Python_Code\`，放好后应该能看到：
+把整个 `vol_connect_workbuddy` 文件夹放到 `你的项目目录\`，放好后应该能看到：
 
 ```
 vol_connect_workbuddy\
@@ -379,7 +379,7 @@ requires_openai_auth = false
 ---
 ## 配置文件详解（config.json）
 
-位置：`G:\Python_Code\vol_connect_workbuddy\config.json`。**首次启动自动创建**，之后每次改设置立即写盘（原子写：先写 `.tmp` 再 rename，断电不会写出半个文件）。
+位置：`你的项目目录\vol_connect_workbuddy\config.json`。**首次启动自动创建**，之后每次改设置立即写盘（原子写：先写 `.tmp` 再 rename，断电不会写出半个文件）。
 
 ### 完整示例
 
@@ -784,7 +784,7 @@ event: response.reasoning_summary_part.done
 两个地方：
 
 1. 面板 → 「运行日志」标签页，点「刷新日志」，看最近 300 行
-2. 文件：`G:\Python_Code\vol_connect_workbuddy\logs\relay-YYYYMMDD.log`
+2. 文件：`你的项目目录\vol_connect_workbuddy\logs\relay-YYYYMMDD.log`
 
 日志格式：
 
